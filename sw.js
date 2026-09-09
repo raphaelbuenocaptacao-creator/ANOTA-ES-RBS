@@ -1,9 +1,19 @@
-const CACHE_NAME = 'rbs-executive-os-v2-safe-shell';
-const SHELL = ['./', './index.html', './manifest.json'];
-
-const SENSITIVE_QUERY_KEYS = [
-  'token','access_token','refresh_token','id_token','authorization','auth','password','senha','secret','key','api_key','apikey','session','code'
+const CACHE_PREFIX = 'rbs-executive-os-shell-';
+const CACHE_NAME = `${CACHE_PREFIX}v3-private-vary-range-safe`;
+const OFFLINE = './index.html';
+const SHELL = [
+  './',
+  OFFLINE,
+  './manifest.json',
+  './manifest.webmanifest',
+  './icon-192.svg',
+  './icon-512.svg',
+  './icon-maskable-512.svg'
 ];
+
+const SENSITIVE_QUERY_KEYS = new Set([
+  'token','access_token','refresh_token','id_token','authorization','auth','password','senha','secret','key','api_key','apikey','session','code','credential','credentials'
+]);
 
 function hasSensitiveRequestHeaders(request) {
   return request.headers.has('authorization') ||
@@ -14,12 +24,13 @@ function hasSensitiveRequestHeaders(request) {
 
 function hasSensitiveQuery(url) {
   for (const key of url.searchParams.keys()) {
-    if (SENSITIVE_QUERY_KEYS.includes(key.toLowerCase())) return true;
+    if (SENSITIVE_QUERY_KEYS.has(key.toLowerCase())) return true;
   }
   return false;
 }
 
 function responseIsPrivate(response) {
+  if (!response || !response.ok || response.status === 206 || response.type === 'opaque' || response.redirected) return true;
   const cacheControl = (response.headers.get('cache-control') || '').toLowerCase();
   const vary = (response.headers.get('vary') || '')
     .toLowerCase()
@@ -27,9 +38,7 @@ function responseIsPrivate(response) {
     .map(v => v.trim())
     .filter(Boolean);
 
-  return !response.ok ||
-    response.type !== 'basic' ||
-    cacheControl.includes('private') ||
+  return cacheControl.includes('private') ||
     cacheControl.includes('no-store') ||
     response.headers.has('set-cookie') ||
     response.headers.has('content-range') ||
@@ -41,38 +50,50 @@ function responseIsPrivate(response) {
 
 function isPublicShellRequest(request, url) {
   if (request.method !== 'GET' || url.origin !== self.location.origin) return false;
-  if (hasSensitiveRequestHeaders(request) || hasSensitiveQuery(url)) return false;
-  if (url.search) return false;
-  const path = url.pathname.replace(/\/+$/, '/');
-  return path.endsWith('/ANOTA-ES-RBS/') ||
-    path.endsWith('/ANOTA-ES-RBS/index.html') ||
-    path.endsWith('/ANOTA-ES-RBS/manifest.json');
+  if (hasSensitiveRequestHeaders(request) || hasSensitiveQuery(url) || url.search) return false;
+  const relative = `.${url.pathname.replace('/ANOTA-ES-RBS', '') || '/'}`;
+  return SHELL.includes(relative) || (relative === './' && SHELL.includes('./'));
+}
+
+async function precacheShell() {
+  const cache = await caches.open(CACHE_NAME);
+  await Promise.all(SHELL.map(async asset => {
+    try {
+      const response = await fetch(asset, { cache: 'no-store', credentials: 'omit', redirect: 'error' });
+      if (!responseIsPrivate(response)) await cache.put(asset, response.clone());
+    } catch (error) {
+      console.warn('RBS Executive OS precache skipped:', asset, error);
+    }
+  }));
 }
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(SHELL)));
-  self.skipWaiting();
+  event.waitUntil(precacheShell().then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(
-    caches.keys().then(keys => Promise.all(
-      keys.filter(key => key !== CACHE_NAME).map(key => caches.delete(key))
-    )).then(() => self.clients.claim())
-  );
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(
+      keys
+        .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
+        .map(key => caches.delete(key))
+    );
+    await self.clients.claim();
+  })());
 });
 
 self.addEventListener('fetch', event => {
   const request = event.request;
-  const url = new URL(request.url);
+  if (request.method !== 'GET') return;
 
-  if (request.method !== 'GET' || url.origin !== self.location.origin || hasSensitiveRequestHeaders(request) || hasSensitiveQuery(url)) {
-    return;
-  }
+  const url = new URL(request.url);
+  if (url.origin !== self.location.origin || hasSensitiveRequestHeaders(request) || hasSensitiveQuery(url)) return;
 
   if (request.mode === 'navigate') {
     event.respondWith(
-      fetch(request).catch(() => caches.match('./index.html'))
+      fetch(request, { cache: 'no-store', credentials: 'same-origin', redirect: 'error' })
+        .catch(() => caches.match(OFFLINE))
     );
     return;
   }
@@ -82,7 +103,7 @@ self.addEventListener('fetch', event => {
   event.respondWith((async () => {
     const cached = await caches.match(request, { ignoreSearch: false });
     if (cached) return cached;
-    const response = await fetch(request);
+    const response = await fetch(request, { cache: 'no-store', credentials: 'omit', redirect: 'error' });
     if (!responseIsPrivate(response)) {
       const cache = await caches.open(CACHE_NAME);
       await cache.put(request, response.clone());
