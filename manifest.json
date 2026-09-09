@@ -1,1 +1,30 @@
-{"name":"RBS Executive OS","short_name":"RBS","start_url":"./","display":"standalone","background_color":"#07101d","theme_color":"#07101d","description":"Agenda executiva, anotações, metas, follow-ups, delegações e alta performance diária."}
+{
+  "name": "RBS Executive OS",
+  "short_name": "RBS",
+  "description": "Agenda executiva, anotações, metas, follow-ups, delegações e alta performance diária.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#07101d",
+  "theme_color": "#07101d",
+  "icons": [
+    {
+      "src": "./icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "./icon-maskable-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
