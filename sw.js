@@ -1,14 +1,14 @@
 const CACHE_PREFIX = 'rbs-executive-os-shell-';
-const CACHE_NAME = `${CACHE_PREFIX}v3-private-vary-range-safe`;
+const CACHE_NAME = `${CACHE_PREFIX}v4-png-private-vary-range-safe`;
 const OFFLINE = './index.html';
 const SHELL = [
   './',
   OFFLINE,
   './manifest.json',
   './manifest.webmanifest',
-  './icon-192.svg',
-  './icon-512.svg',
-  './icon-maskable-512.svg'
+  './icon-192.png',
+  './icon-512.png',
+  './icon-maskable-512.png'
 ];
 
 const SENSITIVE_QUERY_KEYS = new Set([
@@ -45,7 +45,8 @@ function responseIsPrivate(response) {
     vary.includes('*') ||
     vary.includes('cookie') ||
     vary.includes('authorization') ||
-    vary.includes('range');
+    vary.includes('range') ||
+    vary.includes('if-range');
 }
 
 function isPublicShellRequest(request, url) {
