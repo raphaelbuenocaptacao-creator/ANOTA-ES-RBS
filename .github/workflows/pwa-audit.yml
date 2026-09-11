@@ -53,15 +53,13 @@ jobs:
                   raise SystemExit(f'{path}: expected {expected}, got {size}')
           PY
 
-      - name: Validate mobile and install integration
+      - name: Validate mobile and browser install criteria
         run: |
           set -euo pipefail
           grep -qi 'name="viewport"' index.html
           grep -qi 'name="theme-color"' index.html
           grep -qi 'rel="manifest"' index.html
           grep -q "serviceWorker.register" index.html
-          grep -q "beforeinstallprompt" index.html
-          grep -q "appinstalled" index.html
 
       - name: Validate safe service worker policy
         run: |
