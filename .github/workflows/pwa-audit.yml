@@ -1,0 +1,79 @@
+name: ANOTA PWA Audit
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pwa-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate required PWA files
+        run: |
+          set -euo pipefail
+          test -s index.html
+          test -s manifest.webmanifest
+          test -s sw.js
+          test -s icon-192.png
+          test -s icon-512.png
+          test -s icon-maskable-512.png
+
+      - name: Validate manifest
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const m = JSON.parse(fs.readFileSync('manifest.webmanifest','utf8'));
+          for (const key of ['name','short_name','start_url','scope','display','theme_color','background_color']) {
+            if (!m[key]) throw new Error(`manifest missing ${key}`);
+          }
+          if (m.display !== 'standalone') throw new Error('display must be standalone');
+          const icons = m.icons || [];
+          if (!icons.some(i => i.sizes === '192x192' && i.type === 'image/png')) throw new Error('missing PNG 192x192 icon');
+          if (!icons.some(i => i.sizes === '512x512' && i.type === 'image/png' && (!i.purpose || i.purpose.includes('any')))) throw new Error('missing PNG 512x512 icon');
+          if (!icons.some(i => i.sizes === '512x512' && i.type === 'image/png' && (i.purpose || '').includes('maskable'))) throw new Error('missing maskable 512x512 icon');
+          NODE
+
+      - name: Validate PNG dimensions
+        run: |
+          python3 <<'PY'
+          import struct
+          for path, expected in [('icon-192.png',(192,192)),('icon-512.png',(512,512)),('icon-maskable-512.png',(512,512))]:
+              with open(path,'rb') as f:
+                  sig=f.read(24)
+              if sig[:8] != b'\x89PNG\r\n\x1a\n':
+                  raise SystemExit(f'{path}: not PNG')
+              size=struct.unpack('>II',sig[16:24])
+              if size != expected:
+                  raise SystemExit(f'{path}: expected {expected}, got {size}')
+          PY
+
+      - name: Validate mobile and install integration
+        run: |
+          set -euo pipefail
+          grep -qi 'name="viewport"' index.html
+          grep -qi 'name="theme-color"' index.html
+          grep -qi 'rel="manifest"' index.html
+          grep -q "serviceWorker.register" index.html
+          grep -q "beforeinstallprompt" index.html
+          grep -q "appinstalled" index.html
+
+      - name: Validate safe service worker policy
+        run: |
+          set -euo pipefail
+          grep -q "CACHE_PREFIX" sw.js
+          grep -q "authorization" sw.js
+          grep -q "cookie" sw.js
+          grep -q "range" sw.js
+          grep -q "if-range" sw.js
+          grep -q "private" sw.js
+          grep -q "no-store" sw.js
+          grep -q "set-cookie" sw.js
+          grep -q "content-range" sw.js
+          grep -q "request.mode === 'navigate'" sw.js
+          grep -q "url.origin !== self.location.origin" sw.js
